@@ -13,6 +13,9 @@ WORKDIR /app
 COPY --from=builder /app/dist/ dist/
 COPY --from=builder /app/package.json package.json
 COPY --from=builder /app/package-lock.json package-lock.json
-RUN npm ci --omit=dev && npm cache clean --force
+RUN npm ci --omit=dev && \
+    npm cache clean --force && \
+    rm -rf /usr/local/lib/node_modules/npm && \
+    rm -rf /root/.npm
 USER kconn
 ENTRYPOINT ["node", "dist/index.js"]
