@@ -1,0 +1,51 @@
+apiVersion: tekton.dev/v1beta1
+kind: Pipeline
+metadata:
+  name: connector-deploy
+  labels:
+    app.kubernetes.io/part-of: kconn
+spec:
+  description: >-
+    Deploy a Kafka Connect connector: create → status check → restart.
+    Server URL and credentials are read from ConfigMap `kconn-config` and Secret `kconn-credentials`.
+  params:
+    - name: connector-config
+      type: string
+      description: Inline JSON connector configuration
+    - name: kconn-image
+      type: string
+      description: Container image for the kconn CLI
+      default: "quay.io/cen_ku/kconn:latest"
+  tasks:
+    - name: create
+      taskRef:
+        name: kconn-create
+      params:
+        - name: connector-config
+          value: $(params.connector-config)
+        - name: kconn-image
+          value: $(params.kconn-image)
+
+    - name: status-check
+      taskRef:
+        name: kconn-status
+      params:
+        - name: connector-name
+          value: $(tasks.create.results.connector-name)
+        - name: kconn-image
+          value: $(params.kconn-image)
+      runAfter:
+        - create
+
+    - name: restart
+      taskRef:
+        name: kconn-restart
+      params:
+        - name: connector-name
+          value: $(tasks.create.results.connector-name)
+        - name: include-tasks
+          value: "true"
+        - name: kconn-image
+          value: $(params.kconn-image)
+      runAfter:
+        - status-check

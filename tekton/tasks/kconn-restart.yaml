@@ -1,0 +1,58 @@
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: kconn-restart
+  labels:
+    app.kubernetes.io/part-of: kconn
+spec:
+  description: >-
+    Restart a Kafka Connect connector and/or its tasks. Wraps the `kconn restart` CLI command.
+    Server URL and credentials are read from ConfigMap `kconn-config` and Secret `kconn-credentials`.
+  params:
+    - name: kconn-image
+      type: string
+      description: Container image for the kconn CLI
+      default: "quay.io/cen_ku/kconn:latest"
+    - name: output-format
+      type: string
+      description: "Output format: table or json"
+      default: "json"
+    - name: connector-name
+      type: string
+      description: Name of the connector to restart
+    - name: include-tasks
+      type: string
+      description: "Also restart all tasks: true or false"
+      default: "false"
+    - name: only-failed
+      type: string
+      description: "Only restart failed tasks: true or false"
+      default: "false"
+    - name: delay-ms
+      type: string
+      description: Delay in milliseconds before restart
+      default: "0"
+  steps:
+    - name: restart
+      image: $(params.kconn-image)
+      envFrom:
+        - configMapRef:
+            name: kconn-config
+        - secretRef:
+            name: kconn-credentials
+      env:
+        - name: CI
+          value: "true"
+      script: |
+        #!/bin/sh
+        ARGS="restart $(params.connector-name) --output $(params.output-format)"
+        if [ "$(params.include-tasks)" = "true" ]; then
+          ARGS="$ARGS --include-tasks"
+        fi
+        if [ "$(params.only-failed)" = "true" ]; then
+          ARGS="$ARGS --only-failed"
+        fi
+        if [ "$(params.delay-ms)" != "0" ]; then
+          ARGS="$ARGS --delay $(params.delay-ms)"
+        fi
+        node /app/dist/index.js $ARGS

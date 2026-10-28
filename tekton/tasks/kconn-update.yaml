@@ -1,0 +1,50 @@
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: kconn-update
+  labels:
+    app.kubernetes.io/part-of: kconn
+spec:
+  description: >-
+    Update a Kafka Connect connector config. Wraps the `kconn update` CLI command.
+    Server URL and credentials are read from ConfigMap `kconn-config` and Secret `kconn-credentials`.
+  params:
+    - name: kconn-image
+      type: string
+      description: Container image for the kconn CLI
+      default: "quay.io/cen_ku/kconn:latest"
+    - name: output-format
+      type: string
+      description: "Output format: table or json"
+      default: "json"
+    - name: connector-name
+      type: string
+      description: Name of the connector to update
+    - name: config-changes
+      type: string
+      description: JSON object of config key-value pairs to update
+  steps:
+    - name: write-config
+      image: $(params.kconn-image)
+      script: |
+        #!/bin/sh
+        cat > /tmp/config-changes.json << 'CONFIGEOF'
+        $(params.config-changes)
+        CONFIGEOF
+    - name: update
+      image: $(params.kconn-image)
+      envFrom:
+        - configMapRef:
+            name: kconn-config
+        - secretRef:
+            name: kconn-credentials
+      args:
+        - update
+        - $(params.connector-name)
+        - --output
+        - $(params.output-format)
+        - --file
+        - /tmp/config-changes.json
+      env:
+        - name: CI
+          value: "true"

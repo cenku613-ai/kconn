@@ -1,0 +1,11 @@
+apiVersion: v2
+name: kconn
+description: Helm chart for kconn - Kafka Connect CLI tool with Tekton integration
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+keywords:
+  - kafka
+  - kafka-connect
+  - tekton
+  - openshift

@@ -1,0 +1,507 @@
+{{- if .Values.tektonTasks.install }}
+{{- $image := printf "%s:%s" .Values.image.repository .Values.image.tag }}
+{{- $format := .Values.outputFormat }}
+{{- $ns := .Values.namespace }}
+---
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: kconn-list
+  {{- if $ns }}
+  namespace: {{ $ns }}
+  {{- end }}
+  labels:
+    app.kubernetes.io/name: kconn
+    app.kubernetes.io/part-of: kconn
+spec:
+  description: List all Kafka Connect connectors
+  params:
+    - name: kconn-image
+      type: string
+      default: {{ $image | quote }}
+    - name: output-format
+      type: string
+      default: {{ $format | quote }}
+    - name: expand
+      type: string
+      default: "false"
+    - name: state-filter
+      type: string
+      default: ""
+  results:
+    - name: connectors
+      description: JSON array of connector names
+  steps:
+    - name: list
+      image: {{ $image }}
+      envFrom:
+        - configMapRef:
+            name: kconn-config
+        - secretRef:
+            name: {{ .Values.kafkaConnect.credentialsSecret }}
+      env:
+        - name: CI
+          value: "true"
+      script: |
+        #!/bin/sh
+        ARGS="list --output $(params.output-format) --expand=$(params.expand)"
+        if [ -n "$(params.state-filter)" ]; then
+          ARGS="$ARGS --state $(params.state-filter)"
+        fi
+        node /app/dist/index.js $ARGS
+---
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: kconn-describe
+  {{- if $ns }}
+  namespace: {{ $ns }}
+  {{- end }}
+  labels:
+    app.kubernetes.io/name: kconn
+    app.kubernetes.io/part-of: kconn
+spec:
+  description: Describe a Kafka Connect connector
+  params:
+    - name: kconn-image
+      type: string
+      default: {{ $image | quote }}
+    - name: output-format
+      type: string
+      default: {{ $format | quote }}
+    - name: connector-name
+      type: string
+  results:
+    - name: connector-info
+      description: JSON object with connector details
+  steps:
+    - name: describe
+      image: {{ $image }}
+      envFrom:
+        - configMapRef:
+            name: kconn-config
+        - secretRef:
+            name: {{ .Values.kafkaConnect.credentialsSecret }}
+      args:
+        - describe
+        - $(params.connector-name)
+        - --output
+        - $(params.output-format)
+      env:
+        - name: CI
+          value: "true"
+---
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: kconn-status
+  {{- if $ns }}
+  namespace: {{ $ns }}
+  {{- end }}
+  labels:
+    app.kubernetes.io/name: kconn
+    app.kubernetes.io/part-of: kconn
+spec:
+  description: Get connector and task status
+  params:
+    - name: kconn-image
+      type: string
+      default: {{ $image | quote }}
+    - name: output-format
+      type: string
+      default: {{ $format | quote }}
+    - name: connector-name
+      type: string
+    - name: tasks-only
+      type: string
+      default: "false"
+  results:
+    - name: status
+      description: JSON object with connector and task status
+  steps:
+    - name: status
+      image: {{ $image }}
+      envFrom:
+        - configMapRef:
+            name: kconn-config
+        - secretRef:
+            name: {{ .Values.kafkaConnect.credentialsSecret }}
+      args:
+        - status
+        - $(params.connector-name)
+        - --output
+        - $(params.output-format)
+      env:
+        - name: CI
+          value: "true"
+---
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: kconn-create
+  {{- if $ns }}
+  namespace: {{ $ns }}
+  {{- end }}
+  labels:
+    app.kubernetes.io/name: kconn
+    app.kubernetes.io/part-of: kconn
+spec:
+  description: Create a connector from inline config
+  params:
+    - name: kconn-image
+      type: string
+      default: {{ $image | quote }}
+    - name: output-format
+      type: string
+      default: {{ $format | quote }}
+    - name: connector-config
+      type: string
+    - name: connector-name
+      type: string
+      default: ""
+  results:
+    - name: connector-name
+      description: Name of the created connector
+  steps:
+    - name: write-config
+      image: {{ $image }}
+      script: |
+        #!/bin/sh
+        echo '$(params.connector-config)' > /tmp/connector-config.json
+    - name: create
+      image: {{ $image }}
+      envFrom:
+        - configMapRef:
+            name: kconn-config
+        - secretRef:
+            name: {{ .Values.kafkaConnect.credentialsSecret }}
+      env:
+        - name: CI
+          value: "true"
+      script: |
+        #!/bin/sh
+        ARGS="create /tmp/connector-config.json --output $(params.output-format)"
+        if [ -n "$(params.connector-name)" ]; then
+          ARGS="$ARGS --name $(params.connector-name)"
+        fi
+        node /app/dist/index.js $ARGS
+---
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: kconn-update
+  {{- if $ns }}
+  namespace: {{ $ns }}
+  {{- end }}
+  labels:
+    app.kubernetes.io/name: kconn
+    app.kubernetes.io/part-of: kconn
+spec:
+  description: Update connector config
+  params:
+    - name: kconn-image
+      type: string
+      default: {{ $image | quote }}
+    - name: output-format
+      type: string
+      default: {{ $format | quote }}
+    - name: connector-name
+      type: string
+    - name: config-changes
+      type: string
+  steps:
+    - name: write-config
+      image: {{ $image }}
+      script: |
+        #!/bin/sh
+        echo '$(params.config-changes)' > /tmp/config-changes.json
+    - name: update
+      image: {{ $image }}
+      envFrom:
+        - configMapRef:
+            name: kconn-config
+        - secretRef:
+            name: {{ .Values.kafkaConnect.credentialsSecret }}
+      args:
+        - update
+        - $(params.connector-name)
+        - --output
+        - $(params.output-format)
+        - --file
+        - /tmp/config-changes.json
+      env:
+        - name: CI
+          value: "true"
+---
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: kconn-delete
+  {{- if $ns }}
+  namespace: {{ $ns }}
+  {{- end }}
+  labels:
+    app.kubernetes.io/name: kconn
+    app.kubernetes.io/part-of: kconn
+spec:
+  description: Delete a connector
+  params:
+    - name: kconn-image
+      type: string
+      default: {{ $image | quote }}
+    - name: output-format
+      type: string
+      default: {{ $format | quote }}
+    - name: connector-name
+      type: string
+    - name: confirm
+      type: string
+      default: "true"
+  steps:
+    - name: delete
+      image: {{ $image }}
+      envFrom:
+        - configMapRef:
+            name: kconn-config
+        - secretRef:
+            name: {{ .Values.kafkaConnect.credentialsSecret }}
+      args:
+        - delete
+        - $(params.connector-name)
+        - --output
+        - $(params.output-format)
+        - --yes
+      env:
+        - name: CI
+          value: "true"
+---
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: kconn-pause
+  {{- if $ns }}
+  namespace: {{ $ns }}
+  {{- end }}
+  labels:
+    app.kubernetes.io/name: kconn
+    app.kubernetes.io/part-of: kconn
+spec:
+  description: Pause a connector
+  params:
+    - name: kconn-image
+      type: string
+      default: {{ $image | quote }}
+    - name: output-format
+      type: string
+      default: {{ $format | quote }}
+    - name: connector-name
+      type: string
+  steps:
+    - name: pause
+      image: {{ $image }}
+      envFrom:
+        - configMapRef:
+            name: kconn-config
+        - secretRef:
+            name: {{ .Values.kafkaConnect.credentialsSecret }}
+      args:
+        - pause
+        - $(params.connector-name)
+        - --output
+        - $(params.output-format)
+      env:
+        - name: CI
+          value: "true"
+---
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: kconn-resume
+  {{- if $ns }}
+  namespace: {{ $ns }}
+  {{- end }}
+  labels:
+    app.kubernetes.io/name: kconn
+    app.kubernetes.io/part-of: kconn
+spec:
+  description: Resume a paused connector
+  params:
+    - name: kconn-image
+      type: string
+      default: {{ $image | quote }}
+    - name: output-format
+      type: string
+      default: {{ $format | quote }}
+    - name: connector-name
+      type: string
+  steps:
+    - name: resume
+      image: {{ $image }}
+      envFrom:
+        - configMapRef:
+            name: kconn-config
+        - secretRef:
+            name: {{ .Values.kafkaConnect.credentialsSecret }}
+      args:
+        - resume
+        - $(params.connector-name)
+        - --output
+        - $(params.output-format)
+      env:
+        - name: CI
+          value: "true"
+---
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: kconn-restart
+  {{- if $ns }}
+  namespace: {{ $ns }}
+  {{- end }}
+  labels:
+    app.kubernetes.io/name: kconn
+    app.kubernetes.io/part-of: kconn
+spec:
+  description: Restart a connector
+  params:
+    - name: kconn-image
+      type: string
+      default: {{ $image | quote }}
+    - name: output-format
+      type: string
+      default: {{ $format | quote }}
+    - name: connector-name
+      type: string
+    - name: include-tasks
+      type: string
+      default: "false"
+    - name: only-failed
+      type: string
+      default: "false"
+    - name: delay-ms
+      type: string
+      default: "0"
+  steps:
+    - name: restart
+      image: {{ $image }}
+      envFrom:
+        - configMapRef:
+            name: kconn-config
+        - secretRef:
+            name: {{ .Values.kafkaConnect.credentialsSecret }}
+      env:
+        - name: CI
+          value: "true"
+      script: |
+        #!/bin/sh
+        ARGS="restart $(params.connector-name) --output $(params.output-format)"
+        if [ "$(params.include-tasks)" = "true" ]; then
+          ARGS="$ARGS --include-tasks"
+        fi
+        if [ "$(params.only-failed)" = "true" ]; then
+          ARGS="$ARGS --only-failed"
+        fi
+        if [ "$(params.delay-ms)" != "0" ]; then
+          ARGS="$ARGS --delay $(params.delay-ms)"
+        fi
+        node /app/dist/index.js $ARGS
+---
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: kconn-offsets
+  {{- if $ns }}
+  namespace: {{ $ns }}
+  {{- end }}
+  labels:
+    app.kubernetes.io/name: kconn
+    app.kubernetes.io/part-of: kconn
+spec:
+  description: Get or reset connector offsets
+  params:
+    - name: kconn-image
+      type: string
+      default: {{ $image | quote }}
+    - name: output-format
+      type: string
+      default: {{ $format | quote }}
+    - name: connector-name
+      type: string
+    - name: action
+      type: string
+      default: "get"
+  results:
+    - name: offsets
+      description: JSON object with connector offsets
+  steps:
+    - name: offsets
+      image: {{ $image }}
+      envFrom:
+        - configMapRef:
+            name: kconn-config
+        - secretRef:
+            name: {{ .Values.kafkaConnect.credentialsSecret }}
+      env:
+        - name: CI
+          value: "true"
+      script: |
+        #!/bin/sh
+        if [ "$(params.action)" = "reset" ]; then
+          node /app/dist/index.js offsets-reset $(params.connector-name) \
+            --output $(params.output-format) --yes
+        else
+          node /app/dist/index.js offsets $(params.connector-name) \
+            --output $(params.output-format)
+        fi
+---
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: kconn-validate
+  {{- if $ns }}
+  namespace: {{ $ns }}
+  {{- end }}
+  labels:
+    app.kubernetes.io/name: kconn
+    app.kubernetes.io/part-of: kconn
+spec:
+  description: Validate connector config against a plugin
+  params:
+    - name: kconn-image
+      type: string
+      default: {{ $image | quote }}
+    - name: output-format
+      type: string
+      default: {{ $format | quote }}
+    - name: connector-class
+      type: string
+    - name: connector-config
+      type: string
+      default: "{}"
+  results:
+    - name: validation-result
+      description: JSON object with validation results
+  steps:
+    - name: write-config
+      image: {{ $image }}
+      script: |
+        #!/bin/sh
+        echo '$(params.connector-config)' > /tmp/validate-config.json
+    - name: validate
+      image: {{ $image }}
+      envFrom:
+        - configMapRef:
+            name: kconn-config
+        - secretRef:
+            name: {{ .Values.kafkaConnect.credentialsSecret }}
+      args:
+        - validate
+        - $(params.connector-class)
+        - --output
+        - $(params.output-format)
+        - --config
+        - /tmp/validate-config.json
+      env:
+        - name: CI
+          value: "true"
+{{- end }}

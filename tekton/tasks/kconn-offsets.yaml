@@ -1,0 +1,64 @@
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: kconn-offsets
+  labels:
+    app.kubernetes.io/part-of: kconn
+spec:
+  description: >-
+    Get or reset Kafka Connect connector offsets. Wraps the `kconn offsets` and `kconn offsets-reset` CLI commands.
+    Server URL and credentials are read from ConfigMap `kconn-config` and Secret `kconn-credentials`.
+  params:
+    - name: kconn-image
+      type: string
+      description: Container image for the kconn CLI
+      default: "quay.io/cen_ku/kconn:latest"
+    - name: output-format
+      type: string
+      description: "Output format: table or json"
+      default: "json"
+    - name: connector-name
+      type: string
+      description: Name of the connector
+    - name: action
+      type: string
+      description: "Action to perform: get or reset"
+      default: "get"
+  results:
+    - name: offsets
+      description: JSON object with connector offsets (only for 'get' action)
+  steps:
+    - name: offsets
+      image: $(params.kconn-image)
+      envFrom:
+        - configMapRef:
+            name: kconn-config
+        - secretRef:
+            name: kconn-credentials
+      env:
+        - name: CI
+          value: "true"
+      script: |
+        #!/bin/sh
+        if [ "$(params.action)" = "reset" ]; then
+          node /app/dist/index.js offsets-reset $(params.connector-name) \
+            --output $(params.output-format) --yes
+        else
+          node /app/dist/index.js offsets $(params.connector-name) \
+            --output $(params.output-format)
+        fi
+    - name: save-result
+      image: $(params.kconn-image)
+      envFrom:
+        - configMapRef:
+            name: kconn-config
+        - secretRef:
+            name: kconn-credentials
+      script: |
+        #!/bin/sh
+        if [ "$(params.action)" = "get" ]; then
+          node /app/dist/index.js offsets $(params.connector-name) \
+            --output json > $(results.offsets.path)
+        else
+          echo -n '{}' > $(results.offsets.path)
+        fi

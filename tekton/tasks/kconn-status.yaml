@@ -1,0 +1,59 @@
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: kconn-status
+  labels:
+    app.kubernetes.io/part-of: kconn
+spec:
+  description: >-
+    Get Kafka Connect connector and task status. Wraps the `kconn status` CLI command.
+    Server URL and credentials are read from ConfigMap `kconn-config` and Secret `kconn-credentials`.
+  params:
+    - name: kconn-image
+      type: string
+      description: Container image for the kconn CLI
+      default: "quay.io/cen_ku/kconn:latest"
+    - name: output-format
+      type: string
+      description: "Output format: table or json"
+      default: "json"
+    - name: connector-name
+      type: string
+      description: Name of the connector
+    - name: tasks-only
+      type: string
+      description: "Show only task statuses: true or false"
+      default: "false"
+  results:
+    - name: status
+      description: JSON object with connector and task status
+  steps:
+    - name: status
+      image: $(params.kconn-image)
+      envFrom:
+        - configMapRef:
+            name: kconn-config
+        - secretRef:
+            name: kconn-credentials
+      args:
+        - status
+        - $(params.connector-name)
+        - --output
+        - $(params.output-format)
+      env:
+        - name: CI
+          value: "true"
+    - name: save-result
+      image: $(params.kconn-image)
+      envFrom:
+        - configMapRef:
+            name: kconn-config
+        - secretRef:
+            name: kconn-credentials
+      env:
+        - name: CI
+          value: "true"
+      script: |
+        #!/bin/sh
+        node /app/dist/index.js status $(params.connector-name) \
+          --output json > $(results.status.path)

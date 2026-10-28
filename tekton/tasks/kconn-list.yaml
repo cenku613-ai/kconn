@@ -1,0 +1,65 @@
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: kconn-list
+  labels:
+    app.kubernetes.io/part-of: kconn
+spec:
+  description: >-
+    List all Kafka Connect connectors. Wraps the `kconn list` CLI command.
+    Server URL and credentials are read from ConfigMap `kconn-config` and Secret `kconn-credentials`.
+  params:
+    - name: kconn-image
+      type: string
+      description: Container image for the kconn CLI
+      default: "quay.io/cen_ku/kconn:latest"
+    - name: output-format
+      type: string
+      description: "Output format: table or json"
+      default: "json"
+    - name: expand
+      type: string
+      description: "Include status for each connector: true or false"
+      default: "false"
+    - name: state-filter
+      type: string
+      description: "Filter by state: RUNNING, PAUSED, FAILED, UNASSIGNED. Empty for no filter."
+      default: ""
+  results:
+    - name: connectors
+      description: JSON array of connector names
+  steps:
+    - name: list
+      image: $(params.kconn-image)
+      envFrom:
+        - configMapRef:
+            name: kconn-config
+        - secretRef:
+            name: kconn-credentials
+      env:
+        - name: CI
+          value: "true"
+      script: |
+        #!/bin/sh
+        ARGS="list --output $(params.output-format) --expand=$(params.expand)"
+        if [ -n "$(params.state-filter)" ]; then
+          ARGS="$ARGS --state $(params.state-filter)"
+        fi
+        node /app/dist/index.js $ARGS
+    - name: save-result
+      image: $(params.kconn-image)
+      envFrom:
+        - configMapRef:
+            name: kconn-config
+        - secretRef:
+            name: kconn-credentials
+      env:
+        - name: CI
+          value: "true"
+      script: |
+        #!/bin/sh
+        ARGS="list --output json"
+        if [ -n "$(params.state-filter)" ]; then
+          ARGS="$ARGS --state $(params.state-filter)"
+        fi
+        node /app/dist/index.js $ARGS | jq -r '.[].name // .[] | if type == "object" then .name else . end' | jq -R -s -c 'split("\n") | map(select(. != ""))' > $(results.connectors.path)

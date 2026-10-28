@@ -1,0 +1,15 @@
+{
+  "name": "jdbc-source",
+  "config": {
+    "connector.class": "io.confluent.connect.jdbc.JdbcSourceConnector",
+    "connection.url": "jdbc:postgresql://db-host:5432/mydb",
+    "connection.user": "dbuser",
+    "connection.password": "dbpassword",
+    "topic.prefix": "jdbc-",
+    "table.include.list": "users,orders",
+    "tasks.max": "2",
+    "poll.interval.ms": "5000",
+    "mode": "incrementing",
+    "incrementing.column.name": "id"
+  }
+}

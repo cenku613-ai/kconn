@@ -1,0 +1,22 @@
+image:
+  repository: quay.io/cen_ku/kconn
+  tag: latest
+  pullPolicy: IfNotPresent
+
+kafkaConnect:
+  serverUrl: "http://kafka-connect:8083"
+  credentialsSecret: kconn-credentials
+  createSecret: false
+  username: ""
+  password: ""
+
+serviceAccount:
+  name: kconn
+  create: true
+
+tektonTasks:
+  install: true
+
+outputFormat: json
+
+namespace: openshift-pipelines

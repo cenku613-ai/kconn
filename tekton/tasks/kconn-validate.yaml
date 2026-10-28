@@ -1,0 +1,66 @@
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: kconn-validate
+  labels:
+    app.kubernetes.io/part-of: kconn
+spec:
+  description: >-
+    Validate connector config against a Kafka Connect plugin. Wraps the `kconn validate` CLI command.
+    Server URL and credentials are read from ConfigMap `kconn-config` and Secret `kconn-credentials`.
+  params:
+    - name: kconn-image
+      type: string
+      description: Container image for the kconn CLI
+      default: "quay.io/cen_ku/kconn:latest"
+    - name: output-format
+      type: string
+      description: "Output format: table or json"
+      default: "json"
+    - name: connector-class
+      type: string
+      description: Fully qualified connector plugin class name
+    - name: connector-config
+      type: string
+      description: Inline JSON or YAML connector configuration to validate
+      default: "{}"
+  results:
+    - name: validation-result
+      description: JSON object with validation results
+  steps:
+    - name: write-config
+      image: $(params.kconn-image)
+      script: |
+        #!/bin/sh
+        cat > /tmp/validate-config.json << 'CONFIGEOF'
+        $(params.connector-config)
+        CONFIGEOF
+    - name: validate
+      image: $(params.kconn-image)
+      envFrom:
+        - configMapRef:
+            name: kconn-config
+        - secretRef:
+            name: kconn-credentials
+      args:
+        - validate
+        - $(params.connector-class)
+        - --output
+        - $(params.output-format)
+        - --config
+        - /tmp/validate-config.json
+      env:
+        - name: CI
+          value: "true"
+    - name: save-result
+      image: $(params.kconn-image)
+      envFrom:
+        - configMapRef:
+            name: kconn-config
+        - secretRef:
+            name: kconn-credentials
+      script: |
+        #!/bin/sh
+        node /app/dist/index.js validate $(params.connector-class) \
+          --output json \
+          --config /tmp/validate-config.json > $(results.validation-result.path) || true

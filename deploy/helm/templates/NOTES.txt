@@ -1,0 +1,42 @@
+kconn - Kafka Connect CLI Tool
+===============================
+
+{{- if .Values.tektonTasks.install }}
+
+Tekton Tasks have been installed in namespace "{{ .Values.namespace }}".
+
+Available tasks:
+
+  - kconn-list       List connectors
+  - kconn-describe   Describe a connector
+  - kconn-status     Get connector/task status
+  - kconn-create     Create a connector
+  - kconn-update     Update connector config
+  - kconn-delete     Delete a connector
+  - kconn-pause      Pause a connector
+  - kconn-resume     Resume a connector
+  - kconn-restart    Restart a connector
+  - kconn-offsets    Get/reset offsets
+  - kconn-validate   Validate config
+
+{{- end }}
+
+Configuration:
+  Server URL:   edit ConfigMap "kconn-config" (key: KCONN_SERVER)
+  Credentials:  edit Secret "{{ .Values.kafkaConnect.credentialsSecret }}" (keys: KCONN_USERNAME, KCONN_PASSWORD)
+
+To run a Tekton Task:
+
+  tkn task start kconn-list -n {{ .Values.namespace }}
+
+To create the credentials Secret (if not already created):
+
+  oc create secret generic {{ .Values.kafkaConnect.credentialsSecret }} \
+    --from-literal=KCONN_USERNAME=<username> \
+    --from-literal=KCONN_PASSWORD=<password> \
+    -n {{ .Values.namespace }}
+
+To update the Kafka Connect server URL:
+
+  oc patch configmap kconn-config -n {{ .Values.namespace }} \
+    --type merge -p '{"data":{"KCONN_SERVER":"http://new-host:8083"}}'

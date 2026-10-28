@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kconn-config
+data:
+  KCONN_SERVER: "http://kafka-connect:8083"
+  KCONN_OUTPUT: "json"

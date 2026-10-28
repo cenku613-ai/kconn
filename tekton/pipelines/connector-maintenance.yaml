@@ -1,0 +1,65 @@
+apiVersion: tekton.dev/v1beta1
+kind: Pipeline
+metadata:
+  name: connector-maintenance
+  labels:
+    app.kubernetes.io/part-of: kconn
+spec:
+  description: >-
+    Maintenance workflow for a Kafka Connect connector: pause → update config → resume → verify.
+    Server URL and credentials are read from ConfigMap `kconn-config` and Secret `kconn-credentials`.
+  params:
+    - name: connector-name
+      type: string
+      description: Name of the connector to maintain
+    - name: config-changes
+      type: string
+      description: JSON object of config key-value pairs to update
+    - name: kconn-image
+      type: string
+      description: Container image for the kconn CLI
+      default: "quay.io/cen_ku/kconn:latest"
+  tasks:
+    - name: pause
+      taskRef:
+        name: kconn-pause
+      params:
+        - name: connector-name
+          value: $(params.connector-name)
+        - name: kconn-image
+          value: $(params.kconn-image)
+
+    - name: update
+      taskRef:
+        name: kconn-update
+      params:
+        - name: connector-name
+          value: $(params.connector-name)
+        - name: config-changes
+          value: $(params.config-changes)
+        - name: kconn-image
+          value: $(params.kconn-image)
+      runAfter:
+        - pause
+
+    - name: resume
+      taskRef:
+        name: kconn-resume
+      params:
+        - name: connector-name
+          value: $(params.connector-name)
+        - name: kconn-image
+          value: $(params.kconn-image)
+      runAfter:
+        - update
+
+    - name: verify
+      taskRef:
+        name: kconn-status
+      params:
+        - name: connector-name
+          value: $(params.connector-name)
+        - name: kconn-image
+          value: $(params.kconn-image)
+      runAfter:
+        - resume

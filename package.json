@@ -1,0 +1,35 @@
+{
+  "name": "kconn",
+  "version": "1.0.0",
+  "description": "CLI tool to manage Kafka Connectors via the Kafka Connect REST API",
+  "type": "module",
+  "bin": {
+    "kconn": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/index.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": ["kafka", "kafka-connect", "cli", "connector"],
+  "license": "MIT",
+  "dependencies": {
+    "commander": "^13.1.0",
+    "axios": "^1.9.0",
+    "js-yaml": "^4.1.0",
+    "cli-table3": "^0.6.5",
+    "chalk": "^5.4.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3",
+    "tsup": "^8.5.0",
+    "vitest": "^3.1.4",
+    "@types/node": "^24.0.0",
+    "@types/js-yaml": "^4.0.9",
+    "nock": "^14.0.4",
+    "tsx": "^4.19.4"
+  }
+}
